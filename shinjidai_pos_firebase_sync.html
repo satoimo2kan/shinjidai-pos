@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#132d26">
+<title>新時代 POS | お店屋さんごっこ</title>
+<style>
+:root{--bg:#f3f5f2;--ink:#17231f;--muted:#66736c;--green:#176b4d;--lime:#d8ff70;--line:#dfe5df;--white:#fff;--red:#b3261e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:#132d26;color:#fff;padding:18px 16px 16px;position:sticky;top:0;z-index:3}
+.brand{display:flex;align-items:center;justify-content:space-between;gap:12px}.brand small{color:#bdd1c5;display:block;letter-spacing:.12em;font-size:10px}.brand h1{margin:2px 0 0;font-size:22px;letter-spacing:.03em}.pill{border:1px solid #527367;border-radius:99px;padding:7px 10px;font-size:11px;color:#e9f8ef}
+main{max-width:760px;margin:auto;padding:14px 12px 100px}.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:13px}.tab{border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px 5px;font-weight:700;color:var(--muted)}.tab.active{background:var(--green);border-color:var(--green);color:white}
+.panel{display:none}.panel.active{display:block}.card{background:#fff;border:1px solid var(--line);border-radius:17px;padding:15px;margin-bottom:12px;box-shadow:0 3px 12px #183c2510}
+h2{font-size:16px;margin:0 0 12px}.muted{color:var(--muted);font-size:12px;line-height:1.6}.totalrow{display:flex;align-items:end;justify-content:space-between;gap:12px}.total{font-size:36px;line-height:1;font-weight:850;letter-spacing:-.04em}.total small{font-size:13px;letter-spacing:0}.btn{border:0;border-radius:12px;padding:13px 14px;background:var(--green);color:#fff;font-weight:750;font-size:14px;cursor:pointer}.btn:disabled{opacity:.4}.btn.secondary{background:#eaf2ed;color:#174a36}.btn.dark{background:#132d26}.btn.red{background:#fff0ee;color:var(--red)}.btn.full{width:100%}.btn.lime{background:var(--lime);color:#17231f}.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.scanrow{display:grid;grid-template-columns:1fr auto;gap:8px}.field{width:100%;border:1px solid #ccd7ce;background:#fff;border-radius:11px;padding:12px;font:inherit;font-size:15px;min-width:0}.field:focus{outline:2px solid #8ebca2;border-color:transparent}label{font-size:12px;font-weight:700;display:block;margin:10px 0 6px}.items{display:flex;flex-direction:column;gap:0}.item{display:grid;grid-template-columns:1fr auto;gap:8px;padding:12px 0;border-bottom:1px solid #edf0ed;align-items:center}.item:last-child{border-bottom:0}.item strong{display:block;font-size:14px}.item small{color:var(--muted)}.itemright{text-align:right;white-space:nowrap;font-weight:750}.qty{display:flex;align-items:center;gap:8px;margin-top:6px}.qty button{border:1px solid var(--line);background:#f7f9f7;border-radius:7px;width:28px;height:27px;font-weight:bold}.empty{text-align:center;padding:22px 8px;color:var(--muted);font-size:13px}.video-wrap{display:none;background:#101815;border-radius:13px;overflow:hidden;margin-top:10px;position:relative}.video-wrap video{width:100%;max-height:280px;object-fit:cover}.video-wrap .scanlabel{position:absolute;bottom:9px;left:10px;background:#0009;color:white;border-radius:8px;padding:5px 8px;font-size:11px}.notice{padding:10px 12px;border-radius:10px;background:#f1f7f2;color:#2a5b40;font-size:12px;line-height:1.5;margin-top:10px}.notice.warn{background:#fff6df;color:#72541a}.paygrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.payoption{border:1px solid var(--line);border-radius:14px;padding:15px 10px;background:#fff;text-align:center;cursor:pointer}.payoption b{display:block;margin-top:6px}.payoption span{font-size:11px;color:var(--muted)}.payoption:active{background:#eaf2ed}.receipt{border:1px dashed #aab8ad;padding:16px;border-radius:12px;background:#fff;font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap;line-height:1.6}.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}.stat{padding:14px;background:#f4f7f4;border-radius:12px}.stat small{display:block;color:var(--muted);font-size:11px}.stat strong{display:block;font-size:24px;margin-top:4px}.subhead{display:flex;justify-content:space-between;align-items:center;gap:8px}.subhead h2{margin:0}.mini{font-size:11px;padding:8px 10px}.divider{height:1px;background:var(--line);margin:13px 0}.hidden{display:none!important}.foot{text-align:center;color:#7c8880;font-size:10px;padding:15px 0 0}
+@media(min-width:620px){main{padding:20px}.card{padding:19px}.total{font-size:44px}}
+@media print{body *{visibility:hidden!important}#receiptCard,#receiptCard *{visibility:visible!important}#receiptCard{display:block!important;position:absolute!important;left:0;top:0;width:100%;border:0;box-shadow:none;margin:0;padding:0}#receiptCard .subhead,#receiptCard #newSale{display:none!important}#receiptText{display:block;border:0;border-radius:0;padding:0;margin:0;white-space:pre-wrap;color:#000}@page{margin:8mm}}
+</style>
+</head>
+<body>
+<header><div class="brand"><div><small>ごっこ遊び専用・おもちゃのお金</small><h1>新時代 <span style="color:#d8ff70">POS</span></h1></div><span class="pill" id="syncStatus">Firebase接続中…</span></div></header>
+<main>
+<div class="tabs">
+<button class="tab active" data-tab="register">🛒 レジ</button>
+<button class="tab" data-tab="products">📦 商品管理</button>
+<button class="tab" data-tab="history">📊 売上・カード</button>
+</div>
+
+<section class="panel active" id="register">
+<div class="card">
+<div class="totalrow"><div><div class="muted">お買い上げ合計（税込・ごっこ用）</div><div class="total" id="total">¥0</div></div><button class="btn secondary mini" id="clearCart">取消</button></div>
+<div class="divider"></div>
+<div class="subhead"><h2>商品をスキャン</h2><span class="muted">カメラ / 手入力</span></div>
+<div class="actions" style="margin-top:10px">
+<button class="btn" id="startScan">▦ カメラで読む</button>
+<button class="btn secondary" id="manualToggle">⌨ 番号を入力</button>
+</div>
+<div class="video-wrap" id="videoWrap"><video id="video" playsinline muted></video><div class="scanlabel">バーコードを枠内に合わせてね</div></div>
+<div id="manualArea" class="hidden">
+<label for="barcodeInput">商品バーコード番号</label>
+<div class="scanrow"><input class="field" id="barcodeInput" inputmode="numeric" placeholder="例：490000000001"><button class="btn" id="addBarcode">追加</button></div>
+</div>
+<div class="notice" id="scanNotice">商品バーコードを読み取るか、番号を入力して追加できます。</div>
+<div class="divider"></div>
+<div class="subhead"><h2>カート</h2><span class="muted" id="count">0点</span></div>
+<div class="items" id="cartItems"><div class="empty">商品をスキャンしてね</div></div>
+</div>
+<div class="card">
+<h2>お支払い</h2>
+<div class="paygrid">
+<button class="payoption" id="cashPay"><span style="font-size:27px">💴</span><b>現金</b><span>預かり金・お釣り</span></button>
+<button class="payoption" id="cardPay"><span style="font-size:27px">💳</span><b>バーコードカード</b><span>読み取り・残高払い</span></button><button class="payoption" id="qrPay"><span style="font-size:27px">▦</span><b>QR決済</b><span>お店のQRを表示</span></button>
+</div>
+<div id="paymentArea" class="hidden">
+<div class="divider"></div><div id="paymentTitle" style="font-weight:800"></div><div id="paymentFields"></div>
+<div class="actions" style="margin-top:12px"><button class="btn secondary" id="cancelPay">戻る</button><button class="btn lime" id="completePay">支払いを確定</button></div>
+<div class="notice warn">実際の決済ではありません。遊び用の金額・残高だけを扱います。</div>
+</div>
+</div>
+<div class="card hidden" id="qrCard"><div class="subhead"><h2>お店のQR決済</h2><button class="btn secondary mini" id="closeQR">閉じる</button></div><p class="muted">お客さんのスマホで読み取ってね。これは決済リクエスト表示の試作品です。別端末で残高を引き落とし、レジへ自動反映するにはFirebase接続が必要です。</p><div id="qrCode" style="display:flex;justify-content:center;padding:16px;min-height:80px"></div><div id="qrAmount" class="total" style="text-align:center"></div><div class="notice warn">まだ支払いは実行されません。Firebase接続後にQR専用残高・支払い確定・売上反映を有効化します。</div></div>
+<div class="card hidden" id="receiptCard"><div class="subhead"><h2>レシート</h2><button class="btn secondary mini" id="printReceipt">印刷 / PDF</button></div><pre class="receipt" id="receiptText"></pre><button class="btn full" id="newSale">次のお客様</button></div>
+</section>
+
+<section class="panel" id="products">
+<div class="card"><h2>商品を登録・編集</h2><p class="muted">お店の商品に貼ったバーコード番号と価格を登録します。デモ商品は最初から入っています。</p>
+<label for="pBarcode">バーコード番号（重複しない番号）</label><input class="field" id="pBarcode" placeholder="例：490000000004">
+<label for="pName">商品名</label><input class="field" id="pName" placeholder="例：お茶 500ml">
+<label for="pPrice">価格（円）</label><input class="field" id="pPrice" inputmode="numeric" type="number" min="0" placeholder="150">
+<label for="pStock">在庫数</label><input class="field" id="pStock" inputmode="numeric" type="number" min="0" placeholder="20">
+<button class="btn full" style="margin-top:12px" id="saveProduct">商品を登録</button><button class="btn secondary full hidden" style="margin-top:8px" id="cancelEdit">編集をやめる</button>
+</div>
+<div class="card"><div class="subhead"><h2>登録商品</h2><span class="muted" id="productCount"></span></div><div id="productList" class="items"></div></div>
+</section>
+
+<section class="panel" id="history">
+<div class="card"><h2>売上サマリー</h2><div class="stats"><div class="stat"><small>累計売上</small><strong id="salesTotal">¥0</strong></div><div class="stat"><small>会計回数</small><strong id="salesCount">0</strong></div></div><p class="muted">商品・在庫・カード残高・売上はFirebase経由で端末間同期します。ごっこ遊び専用です。</p><button class="btn red full" id="resetSales">売上履歴をリセット</button></div>
+<div class="card"><h2>おもちゃカードを管理</h2><p class="muted">カードに印刷したバーコード番号を登録すると、カード番号で残高を呼び出せます。</p>
+<label for="cBarcode">カードのバーコード番号</label><input class="field" id="cBarcode" placeholder="例：CARD001">
+<label for="cName">カード名・持ち主名</label><input class="field" id="cName" placeholder="例：新時代カード A">
+<label for="cBalance">最初の残高（円）</label><input class="field" id="cBalance" inputmode="numeric" type="number" min="0" placeholder="3000">
+<button class="btn full" style="margin-top:12px" id="saveCard">カードを登録</button>
+</div>
+<div class="card"><h2>登録カード</h2><div id="cardList" class="items"></div></div>
+<div class="card"><h2>最近の会計</h2><div id="salesList" class="items"></div></div>
+</section>
+<div class="foot">新時代 POS • ごっこ遊び専用 • 実際のお金・銀行・決済サービスには接続しません</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const yen=n=>'¥'+Number(n||0).toLocaleString('ja-JP');
+const defaultProducts=[
+ {barcode:'490000000001',name:'りんごジュース',price:150,stock:30},
+ {barcode:'490000000002',name:'ポテトチップス',price:120,stock:25},
+ {barcode:'490000000003',name:'チョコレート',price:110,stock:20}
+];
+function load(key,fallback){try{const v=localStorage.getItem('shinpos_'+key);return v?JSON.parse(v):fallback}catch(e){return fallback}}
+function save(key,v){try{localStorage.setItem('shinpos_'+key,JSON.stringify(v))}catch(e){}}
+let products=load('products',defaultProducts),cards=load('cards',[]),sales=load('sales',[]),cart=[],paymentMode='',editingBarcode=null,stream=null,scanLoop=null,scanPurpose='product';
+function persist(){save('products',products);save('cards',cards);save('sales',sales);if(window.syncShinposData)window.syncShinposData({products,cards,sales})}
+window.applyShinposRemoteData=function(data){if(!data||typeof data!=='object')return;if(Array.isArray(data.products))products=data.products;if(Array.isArray(data.cards))cards=data.cards;if(Array.isArray(data.sales))sales=data.sales;save('products',products);save('cards',cards);save('sales',sales);renderAll();};
+window.getShinposLocalData=function(){return {products,cards,sales};}
+function moneyTotal(){return cart.reduce((s,x)=>s+x.price*x.qty,0)}
+function setNotice(msg,warn=false){$('scanNotice').textContent=msg;$('scanNotice').className='notice'+(warn?' warn':'')}
+function lookupProduct(code){return products.find(p=>p.barcode===String(code).trim())}
+function addProduct(code){
+ const p=lookupProduct(code);
+ if(!p){setNotice('未登録の商品です。商品管理からバーコードと価格を登録してください。',true);return}
+ if(p.stock<=0){setNotice('在庫がありません（商品管理で在庫数を確認してください）。',true);return}
+ let row=cart.find(x=>x.barcode===p.barcode);
+ if(row)row.qty++;else cart.push({...p,qty:1});
+ renderCart();setNotice(p.name+' を追加しました。');
+ $('barcodeInput').value='';
+}
+function renderCart(){
+ $('total').textContent=yen(moneyTotal());$('count').textContent=cart.reduce((s,x)=>s+x.qty,0)+'点';
+ $('cartItems').innerHTML='';
+ if(!cart.length){$('cartItems').innerHTML='<div class="empty">商品をスキャンしてね</div>';return}
+ cart.forEach(x=>{const d=document.createElement('div');d.className='item';d.innerHTML=`<div><strong>${esc(x.name)}</strong><small>${yen(x.price)} / 個</small><div class="qty"><button aria-label="減らす">−</button><span>${x.qty}</span><button aria-label="増やす">＋</button></div></div><div class="itemright">${yen(x.price*x.qty)}<br><button class="btn red mini" style="margin-top:6px">削除</button></div>`;
+ const bs=d.querySelectorAll('.qty button');bs[0].onclick=()=>{x.qty--;if(x.qty<=0)cart=cart.filter(y=>y.barcode!==x.barcode);renderCart()};bs[1].onclick=()=>{const p=lookupProduct(x.barcode);if(p&&x.qty>=p.stock){setNotice('在庫数を超えています。',true);return}x.qty++;renderCart()};d.querySelector('.itemright button').onclick=()=>{cart=cart.filter(y=>y.barcode!==x.barcode);renderCart()};$('cartItems').appendChild(d)})
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===b.dataset.tab));stopCamera();renderAll()});
+$('manualToggle').onclick=()=>{$('manualArea').classList.toggle('hidden');if(!$('manualArea').classList.contains('hidden'))$('barcodeInput').focus()};
+$('addBarcode').onclick=()=>addProduct($('barcodeInput').value);
+$('barcodeInput').addEventListener('keydown',e=>{if(e.key==='Enter')addProduct(e.target.value)});
+$('clearCart').onclick=()=>{cart=[];renderCart();closePayment();setNotice('カートを空にしました。')};
+async function startCamera(purpose='product'){
+ scanPurpose=purpose;
+ if(!navigator.mediaDevices?.getUserMedia){setNotice('このブラウザではカメラを使えません。番号入力をご利用ください。',true);$('manualArea').classList.remove('hidden');return}
+ if(!('BarcodeDetector'in window)){setNotice('このブラウザはバーコード自動検出に未対応です。番号入力をご利用ください。',true);$('manualArea').classList.remove('hidden');return}
+ try{
+  const supported=await BarcodeDetector.getSupportedFormats();const formats=['ean_13','ean_8','upc_a','upc_e','code_128','qr_code'].filter(x=>supported.includes(x));
+  if(!formats.length)throw Error('対応するバーコード形式がありません');
+  const detector=new BarcodeDetector({formats});stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+  $('video').srcObject=stream;$('videoWrap').style.display='block';await $('video').play();$('startScan').textContent='■ 読み取り停止';
+  let last='',lastTime=0;
+  const tick=async()=>{if(!stream)return;try{const codes=await detector.detect($('video'));if(codes.length){const now=Date.now(),raw=codes[0].rawValue;if(raw!==last||now-lastTime>1800){last=raw;lastTime=now;if(scanPurpose==='card'){if($('cardCode')){$('cardCode').value=raw;showCardInfo();stopCamera();setNotice('カードを読み取りました。内容を確認して支払いを確定してください。')}}else{addProduct(raw)}}}}catch(e){}scanLoop=requestAnimationFrame(tick)};
+  tick();setNotice(scanPurpose==='card'?'カードのバーコードをカメラに映してください。':'カメラ起動中です。商品バーコードを映してください。');
+ }catch(e){stopCamera();setNotice('カメラを起動できませんでした。HTTPSのページで開くか、番号入力をご利用ください。',true);$('manualArea').classList.remove('hidden')}
+}
+function stopCamera(){if(scanLoop)cancelAnimationFrame(scanLoop);scanLoop=null;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}$('video').srcObject=null;$('videoWrap').style.display='none';$('startScan').textContent='▦ カメラで読む'}
+$('startScan').onclick=()=>stream?stopCamera():startCamera();
+function openPayment(mode){
+ if(!cart.length){setNotice('先に商品をカートに追加してください。',true);return}
+ paymentMode=mode;$('paymentArea').classList.remove('hidden');$('paymentTitle').textContent=mode==='cash'?'💴 現金のお会計':'💳 バーコードカードのお会計';
+ if(mode==='cash'){$('paymentFields').innerHTML=`<label for="cashGiven">お預かりした金額（円）</label><input class="field" id="cashGiven" type="number" inputmode="numeric" min="0" placeholder="例：500"><div class="notice">お釣り：<strong id="changeDue">¥0</strong></div>`; $('cashGiven').addEventListener('input',()=>{$('changeDue').textContent=yen(Math.max(0,Number($('cashGiven').value||0)-moneyTotal()))})}
+ else{$('paymentFields').innerHTML=`<label for="cardCode">カードのバーコード番号</label><input class="field" id="cardCode" placeholder="カード番号（手入力も可）"><div class="actions" style="margin-top:8px"><button class="btn secondary" id="scanCard">▦ カメラで読む</button><button class="btn secondary" id="lookupCard">カードを確認</button></div><div id="cardInfo" class="notice">バーコードを読み取るか番号を入力してください。</div>`;$('lookupCard').onclick=showCardInfo;$('scanCard').onclick=()=>startCamera('card');$('cardCode').addEventListener('keydown',e=>{if(e.key==='Enter')showCardInfo()})}
+}
+function showCardInfo(){const c=cards.find(c=>c.barcode===$('cardCode').value.trim());$('cardInfo').textContent=c?`${c.name} / 残高 ${yen(c.balance)}${c.balance>=moneyTotal()?'':' / 残高不足'}`:'カードが見つかりません。カード管理で登録してください。';$('cardInfo').dataset.valid=c&&c.balance>=moneyTotal()?'yes':'no'}
+$('cashPay').onclick=()=>openPayment('cash');$('cardPay').onclick=()=>openPayment('card');
+$('qrPay').onclick=()=>{if(!cart.length){setNotice('先に商品をカートに追加してください。',true);return}stopCamera();$('qrCard').classList.remove('hidden');$('qrAmount').textContent=yen(moneyTotal());$('qrCode').innerHTML='';const payload=JSON.stringify({type:'shinpos-demo-payment',amount:moneyTotal(),items:cart.map(x=>({name:x.name,qty:x.qty,price:x.price})),requestId:'PAY-'+Date.now(),createdAt:new Date().toISOString()});if(window.QRCode){new QRCode($('qrCode'),{text:payload,width:220,height:220,correctLevel:QRCode.CorrectLevel.M})}else{$('qrCode').textContent='QR生成ライブラリを読み込めませんでした。インターネット接続を確認してください.'}$('qrCard').scrollIntoView({behavior:'smooth',block:'start'})};$('closeQR').onclick=()=>$('qrCard').classList.add('hidden');
+function closePayment(){$('paymentArea').classList.add('hidden');paymentMode=''}
+$('cancelPay').onclick=closePayment;
+$('completePay').onclick=()=>{
+ const total=moneyTotal();if(!total||!paymentMode)return;
+ let method='',given=0,change=0,cardName='';
+ if(paymentMode==='cash'){given=Number($('cashGiven')?.value);if(!Number.isFinite(given)||given<total){alert('お預かり金額が合計金額より少ないです。');return}change=given-total;method='現金'}
+ else{showCardInfo();if($('cardInfo').dataset.valid!=='yes'){alert('カードが未登録、または残高が不足しています。');return}const c=cards.find(c=>c.barcode===$('cardCode').value.trim());c.balance-=total;cardName=c.name;method='おもちゃカード';persist()}
+ cart.forEach(x=>{const p=lookupProduct(x.barcode);if(p)p.stock=Math.max(0,p.stock-x.qty)});
+ const sale={id:Date.now(),date:new Date().toLocaleString('ja-JP'),items:cart.map(x=>({...x})),total,method,given,change,cardName};sales.unshift(sale);persist();
+ $('receiptText').textContent=makeReceipt(sale);$('receiptCard').classList.remove('hidden');closePayment();stopCamera();renderAll();$('receiptCard').scrollIntoView({behavior:'smooth',block:'start'})
+};
+function makeReceipt(s){return '       新時代 POS\n      お買い上げレシート\n------------------------------\n'+s.date+'\n'+s.items.map(x=>x.name+' × '+x.qty+'\n  '+yen(x.price)+' × '+x.qty+'     '+yen(x.price*x.qty)).join('\n')+'\n------------------------------\n合計             '+yen(s.total)+'\nお支払い         '+s.method+(s.cardName?'（'+s.cardName+'）':'')+(s.method==='現金'?'\nお預かり         '+yen(s.given)+'\nお釣り           '+yen(s.change):'')+'\n\nごっこ遊びをご利用いただき\nありがとうございます！\n※おもちゃ用レシートです'}
+$('printReceipt').onclick=()=>window.print();
+$('newSale').onclick=()=>{cart=[];renderCart();$('receiptCard').classList.add('hidden');setNotice('次のお客様をお迎えできます。');window.scrollTo({top:0,behavior:'smooth'})};
+$('saveProduct').onclick=()=>{
+ const barcode=$('pBarcode').value.trim(),name=$('pName').value.trim(),price=Number($('pPrice').value),stock=Number($('pStock').value);
+ if(!barcode||!name||$('pPrice').value===''||price<0||!Number.isFinite(price)||$('pStock').value===''||stock<0||!Number.isFinite(stock)){alert('バーコード・商品名・価格・在庫数を正しく入力してください。');return}
+ const old=products.find(p=>p.barcode===barcode);
+ if(old&&editingBarcode!==barcode){alert('このバーコードは登録済みです。');return}
+ if(editingBarcode&&editingBarcode!==barcode)products=products.filter(p=>p.barcode!==editingBarcode);
+ const item={barcode,name,price:Math.floor(price),stock:Math.floor(stock)};
+ const idx=products.findIndex(p=>p.barcode===barcode);if(idx>=0)products[idx]=item;else products.push(item);
+ persist();clearProductForm();renderAll();alert('商品を保存しました。')
+};
+function clearProductForm(){editingBarcode=null;['pBarcode','pName','pPrice','pStock'].forEach(id=>$(id).value='');$('pBarcode').disabled=false;$('saveProduct').textContent='商品を登録';$('cancelEdit').classList.add('hidden')}
+$('cancelEdit').onclick=clearProductForm;
+function editProduct(code){const p=lookupProduct(code);if(!p)return;editingBarcode=code;$('pBarcode').value=p.barcode;$('pBarcode').disabled=true;$('pName').value=p.name;$('pPrice').value=p.price;$('pStock').value=p.stock;$('saveProduct').textContent='変更を保存';$('cancelEdit').classList.remove('hidden');$('pName').focus();window.scrollTo({top:0,behavior:'smooth'})}
+function renderProducts(){$('productCount').textContent=products.length+'商品';$('productList').innerHTML='';products.forEach(p=>{const d=document.createElement('div');d.className='item';d.innerHTML=`<div><strong>${esc(p.name)}</strong><small>${esc(p.barcode)} / 在庫 ${p.stock}</small></div><div class="itemright">${yen(p.price)}<br><button class="btn secondary mini">編集</button> <button class="btn red mini">削除</button></div>`;d.querySelectorAll('button')[0].onclick=()=>editProduct(p.barcode);d.querySelectorAll('button')[1].onclick=()=>{if(confirm(p.name+' を削除しますか？')){products=products.filter(x=>x.barcode!==p.barcode);persist();renderAll()}};$('productList').appendChild(d)})}
+$('saveCard').onclick=()=>{const barcode=$('cBarcode').value.trim(),name=$('cName').value.trim(),balance=Number($('cBalance').value);if(!barcode||!name||$('cBalance').value===''||balance<0||!Number.isFinite(balance)){alert('カード番号・カード名・残高を入力してください。');return}if(cards.some(c=>c.barcode===barcode)){alert('このカード番号は登録済みです。');return}cards.push({barcode,name,balance:Math.floor(balance)});persist();$('cBarcode').value='';$('cName').value='';$('cBalance').value='';renderAll();alert('カードを登録しました。')};
+function renderCards(){$('cardList').innerHTML='';if(!cards.length){$('cardList').innerHTML='<div class="empty">カードはまだ登録されていません</div>';return}cards.forEach(c=>{const d=document.createElement('div');d.className='item';d.innerHTML=`<div><strong>${esc(c.name)}</strong><small>${esc(c.barcode)}</small></div><div class="itemright">${yen(c.balance)}<br><button class="btn secondary mini">チャージ</button> <button class="btn red mini">削除</button></div>`;d.querySelectorAll('button')[0].onclick=()=>{const n=prompt('追加する金額（円）', '1000');if(n===null)return;const v=Number(n);if(!Number.isFinite(v)||v<0){alert('金額を確認してください');return}c.balance+=Math.floor(v);persist();renderAll()};d.querySelectorAll('button')[1].onclick=()=>{if(confirm(c.name+' を削除しますか？')){cards=cards.filter(x=>x.barcode!==c.barcode);persist();renderAll()}};$('cardList').appendChild(d)})}
+$('resetSales').onclick=()=>{if(confirm('売上履歴をすべて削除しますか？商品・カード残高はそのままです。')){sales=[];persist();renderAll()}};
+function renderHistory(){$('salesTotal').textContent=yen(sales.reduce((s,x)=>s+x.total,0));$('salesCount').textContent=sales.length;$('salesList').innerHTML='';if(!sales.length){$('salesList').innerHTML='<div class="empty">まだ会計履歴がありません</div>';return}sales.slice(0,30).forEach(s=>{const d=document.createElement('div');d.className='item';d.innerHTML=`<div><strong>${esc(s.method)} / ${s.items.reduce((a,x)=>a+x.qty,0)}点</strong><small>${esc(s.date)}${s.cardName?' / '+esc(s.cardName):''}</small></div><div class="itemright">${yen(s.total)}</div>`;$('salesList').appendChild(d)})}
+function renderAll(){renderProducts();renderCards();renderHistory();renderCart()}
+renderAll();
+</script>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyALVQnUGdW-nPDReeIUS5a30FtqMSpCmwk",
+  authDomain: "sinjidai-pos.firebaseapp.com",
+  projectId: "sinjidai-pos",
+  storageBucket: "sinjidai-pos.firebasestorage.app",
+  messagingSenderId: "916103230062",
+  appId: "1:916103230062:web:7f0bd75dbbaedfeb85ac7f",
+  measurementId: "G-W661KWC33P"
+};
+const statusEl = document.getElementById('syncStatus');
+const setStatus = (text, warn=false) => { if(statusEl){statusEl.textContent=text;statusEl.style.borderColor=warn?'#e5a29d':'#527367';statusEl.style.color=warn?'#ffd7d4':'#e9f8ef';} };
+try {
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const storeRef = doc(db, 'stores', 'sinjidai-pos');
+  let ready = false;
+  let writeQueue = Promise.resolve();
+  let applyingRemote = false;
+  await signInAnonymously(auth);
+  const first = await getDoc(storeRef);
+  if (!first.exists()) {
+    const initial = window.getShinposLocalData();
+    await setDoc(storeRef, {...initial, updatedAt: serverTimestamp()});
+  } else {
+    applyingRemote = true;
+    window.applyShinposRemoteData(first.data());
+    applyingRemote = false;
+  }
+  onSnapshot(storeRef, snap => {
+    if (!snap.exists()) return;
+    applyingRemote = true;
+    window.applyShinposRemoteData(snap.data());
+    applyingRemote = false;
+    ready = true;
+    setStatus('☁ 同期中');
+  }, err => { console.error(err); setStatus('同期エラー', true); });
+  window.syncShinposData = data => {
+    if (!ready || applyingRemote) return;
+    writeQueue = writeQueue.then(() => setDoc(storeRef, {...data, updatedAt: serverTimestamp()}))
+      .then(() => setStatus('☁ 同期済み'))
+      .catch(err => { console.error(err); setStatus('保存失敗', true); });
+  };
+  setStatus('☁ 接続完了');
+} catch (err) {
+  console.error(err);
+  const code = err?.code || '';
+  if (code.includes('permission-denied')) setStatus('Firestoreルール確認', true);
+  else if (code.includes('auth')) setStatus('認証設定確認', true);
+  else setStatus('接続できません', true);
+}
+</script>
+
+</body>
+</html>
