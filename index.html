@@ -103,13 +103,28 @@ window.applyShinposRemoteData=function(data){if(!data||typeof data!=='object')re
 window.getShinposLocalData=function(){return {products,cards,sales};}
 function moneyTotal(){return cart.reduce((s,x)=>s+x.price*x.qty,0)}
 let scanAudioContext=null;
-function beep(){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;scanAudioContext=scanAudioContext||new C();const c=scanAudioContext;const play=()=>{const o=c.createOscillator(),g=c.createGain();o.type='sine';o.frequency.setValueAtTime(1450,c.currentTime);g.gain.setValueAtTime(.0001,c.currentTime);g.gain.exponentialRampToValueAtTime(.8,c.currentTime+.01);g.gain.setValueAtTime(.8,c.currentTime+.10);g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+.24);o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+.17)};if(c.state==='suspended')c.resume().then(play).catch(()=>{});else play()}catch(e){}}
+// 読み取り成功・残高不足・未登録・一般エラーを音で区別する
+function playTone(type='scan'){
+ try{
+  const C=window.AudioContext||window.webkitAudioContext;if(!C)return;
+  scanAudioContext=scanAudioContext||new C();const c=scanAudioContext;
+  const patterns={
+   scan:[{f:1750,d:.20,t:0}],
+   low:[{f:520,d:.18,t:0},{f:390,d:.24,t:.22}],
+   unknown:[{f:300,d:.16,t:0},{f:300,d:.16,t:.22},{f:300,d:.24,t:.44}],
+   error:[{f:240,d:.30,t:0},{f:180,d:.34,t:.34}]
+  };
+  const play=()=>{(patterns[type]||patterns.error).forEach(n=>{const o=c.createOscillator(),g=c.createGain(),start=c.currentTime+n.t;o.type='sine';o.frequency.setValueAtTime(n.f,start);g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(.98,start+.012);g.gain.setValueAtTime(.98,start+Math.min(n.d*.7,.22));g.gain.exponentialRampToValueAtTime(.0001,start+n.d);o.connect(g);g.connect(c.destination);o.start(start);o.stop(start+n.d+.01)});};
+  if(c.state==='suspended')c.resume().then(play).catch(()=>{});else play();
+ }catch(e){}
+}
+function beep(){playTone('scan')}
 function setNotice(msg,warn=false){$('scanNotice').textContent=msg;$('scanNotice').className='notice'+(warn?' warn':'')}
 function lookupProduct(code){return products.find(p=>p.barcode===String(code).trim())}
 function addProduct(code){
  const p=lookupProduct(code);
- if(!p){setNotice('未登録の商品です。商品管理からバーコードと価格を登録してください。',true);return}
- if(p.stock<=0){setNotice('在庫がありません（商品管理で在庫数を確認してください）。',true);return}
+ if(!p){playTone('unknown');setNotice('未登録の商品です。商品管理からバーコードと価格を登録してください。',true);return}
+ if(p.stock<=0){playTone('error');setNotice('在庫がありません（商品管理で在庫数を確認してください）。',true);return}
  let row=cart.find(x=>x.barcode===p.barcode);
  if(row)row.qty++;else cart.push({...p,qty:1});
  renderCart();beep();setNotice(p.name+' を追加しました。');
@@ -150,7 +165,7 @@ function openPayment(mode){
  if(mode==='cash'){$('paymentFields').innerHTML=`<label for="cashGiven">お預かりした金額（円）</label><input class="field" id="cashGiven" type="number" inputmode="numeric" min="0" placeholder="例：500"><div class="notice">お釣り：<strong id="changeDue">¥0</strong></div>`; $('cashGiven').addEventListener('input',()=>{$('changeDue').textContent=yen(Math.max(0,Number($('cashGiven').value||0)-moneyTotal()))})}
  else{$('paymentFields').innerHTML=`<label for="cardCode">カードのバーコード番号</label><input class="field" id="cardCode" placeholder="カード番号（手入力も可）"><div class="actions" style="margin-top:8px"><button class="btn secondary" id="scanCard">▦ カメラで読む</button><button class="btn secondary" id="lookupCard">カードを確認</button></div><div id="cardInfo" class="notice">バーコードを読み取るか番号を入力してください。</div>`;$('lookupCard').onclick=showCardInfo;$('scanCard').onclick=()=>{beep();startCamera('card')};$('cardCode').addEventListener('keydown',e=>{if(e.key==='Enter')showCardInfo()})}
 }
-function showCardInfo(){const box=$('cardInfo');box.dataset.split='no';const c=cards.find(c=>c.barcode===$('cardCode').value.trim());if(!c){box.textContent='カードが見つかりません。カード管理で登録してください。';box.dataset.valid='no';return}const short=Math.max(0,moneyTotal()-c.balance);box.dataset.valid=c.balance>=moneyTotal()?'yes':'no';box.innerHTML=`<strong>${esc(c.name)}</strong> / 残高 ${yen(c.balance)}${short?' / 不足 '+yen(short):' / 支払い可能'}${short?`<div class="actions" style="margin-top:9px"><button class="btn secondary" id="chargeForPay">チャージして払う</button><button class="btn secondary" id="splitForPay">不足分を現金で払う</button></div><div id="splitCashArea" class="hidden" style="margin-top:8px"><label for="splitCashGiven">現金で支払う金額（必要額 ${yen(short)}）</label><input class="field" id="splitCashGiven" type="number" min="${short}" value="${short}"><p class="muted">カード残高 ${yen(c.balance)} ＋ 現金 ${yen(short)} ＝ 合計 ${yen(moneyTotal())}</p></div>`:''}`;const charge=$('chargeForPay');if(charge)charge.onclick=()=>{const n=prompt('チャージする金額（円）',String(short));if(n===null)return;const v=Number(n);if(!Number.isFinite(v)||v<short||v<=0){alert('不足額以上の金額を入力してください。');return}c.balance+=Math.floor(v);persist();showCardInfo()};const split=$('splitForPay');if(split)split.onclick=()=>{$('splitCashArea').classList.remove('hidden');box.dataset.split='yes';};box.dataset.split=box.dataset.split||'no';}
+function showCardInfo(){const box=$('cardInfo');box.dataset.split='no';const c=cards.find(c=>c.barcode===$('cardCode').value.trim());if(!c){playTone('unknown');box.textContent='カードが見つかりません。カード管理で登録してください。';box.dataset.valid='no';return}const short=Math.max(0,moneyTotal()-c.balance);if(short>0)playTone('low');box.dataset.valid=c.balance>=moneyTotal()?'yes':'no';box.innerHTML=`<strong>${esc(c.name)}</strong> / 残高 ${yen(c.balance)}${short?' / 不足 '+yen(short):' / 支払い可能'}${short?`<div class="actions" style="margin-top:9px"><button class="btn secondary" id="chargeForPay">チャージして払う</button><button class="btn secondary" id="splitForPay">不足分を現金で払う</button></div><div id="splitCashArea" class="hidden" style="margin-top:8px"><label for="splitCashGiven">現金で支払う金額（必要額 ${yen(short)}）</label><input class="field" id="splitCashGiven" type="number" min="${short}" value="${short}"><p class="muted">カード残高 ${yen(c.balance)} ＋ 現金 ${yen(short)} ＝ 合計 ${yen(moneyTotal())}</p></div>`:''}`;const charge=$('chargeForPay');if(charge)charge.onclick=()=>{const n=prompt('チャージする金額（円）',String(short));if(n===null)return;const v=Number(n);if(!Number.isFinite(v)||v<short||v<=0){alert('不足額以上の金額を入力してください。');return}c.balance+=Math.floor(v);persist();showCardInfo()};const split=$('splitForPay');if(split)split.onclick=()=>{$('splitCashArea').classList.remove('hidden');box.dataset.split='yes';};box.dataset.split=box.dataset.split||'no';}
 $('cashPay').onclick=()=>openPayment('cash');$('cardPay').onclick=()=>openPayment('card');
 $('qrPay').onclick=()=>{if(!cart.length){setNotice('先に商品をカートに追加してください。',true);return}stopCamera();$('qrCard').classList.remove('hidden');$('qrAmount').textContent=yen(moneyTotal());$('qrCode').innerHTML='';const payload=JSON.stringify({type:'shinpos-demo-payment',amount:moneyTotal(),items:cart.map(x=>({name:x.name,qty:x.qty,price:x.price})),requestId:'PAY-'+Date.now(),createdAt:new Date().toISOString()});if(window.QRCode){new QRCode($('qrCode'),{text:payload,width:220,height:220,correctLevel:QRCode.CorrectLevel.M})}else{$('qrCode').textContent='QR生成ライブラリを読み込めませんでした。インターネット接続を確認してください.'}$('qrCard').scrollIntoView({behavior:'smooth',block:'start'})};$('closeQR').onclick=()=>$('qrCard').classList.add('hidden');
 function closePayment(){$('paymentArea').classList.add('hidden');paymentMode=''}
@@ -159,7 +174,7 @@ $('completePay').onclick=()=>{
  const total=moneyTotal();if(!total||!paymentMode)return;
  let method='',given=0,change=0,cardName='';
  if(paymentMode==='cash'){given=Number($('cashGiven')?.value);if(!Number.isFinite(given)||given<total){alert('お預かり金額が合計金額より少ないです。');return}change=given-total;method='現金'}
- else{showCardInfo();const c=cards.find(c=>c.barcode===$('cardCode').value.trim());if(!c){alert('カードが未登録です。');return}if(c.balance>=total){c.balance-=total;c.points=(c.points||0)+Math.floor(total/100);cardName=c.name;method='おもちゃカード';}else{const split=$('cardInfo').dataset.split==='yes';if(!split){alert('残高不足です。「チャージして払う」か「不足分を現金で払う」を選んでください。');return}const cashInput=$('splitCashGiven');const short=total-c.balance;given=Number(cashInput?.value);if(!Number.isFinite(given)||given<short){alert('現金で払う金額が不足しています。必要額は '+yen(short)+' です。');return}change=given-short;c.balance=0;c.points=(c.points||0)+Math.floor(total/100);cardName=c.name;method='カード＋現金';}persist()}
+ else{showCardInfo();const c=cards.find(c=>c.barcode===$('cardCode').value.trim());if(!c){alert('カードが未登録です。');return}if(c.balance>=total){c.balance-=total;c.points=(c.points||0)+Math.floor(total/100);cardName=c.name;method='おもちゃカード';}else{const split=$('cardInfo').dataset.split==='yes';if(!split){playTone('low');alert('残高不足です。「チャージして払う」か「不足分を現金で払う」を選んでください。');return}const cashInput=$('splitCashGiven');const short=total-c.balance;given=Number(cashInput?.value);if(!Number.isFinite(given)||given<short){alert('現金で払う金額が不足しています。必要額は '+yen(short)+' です。');return}change=given-short;c.balance=0;c.points=(c.points||0)+Math.floor(total/100);cardName=c.name;method='カード＋現金';}persist()}
  cart.forEach(x=>{const p=lookupProduct(x.barcode);if(p)p.stock=Math.max(0,p.stock-x.qty)});
  const splitPaid=method==='カード＋現金';const sale={id:Date.now(),date:new Date().toLocaleString('ja-JP'),items:cart.map(x=>({...x})),total,method,given,change,cardName,cardPaid:splitPaid?Math.max(0,total-(given-change)):total,cashPaid:splitPaid?given-change:(method==='現金'?total:0)};sales.unshift(sale);persist();
  $('receiptText').textContent=makeReceipt(sale);$('receiptCard').classList.remove('hidden');closePayment();stopCamera();renderAll();$('receiptCard').scrollIntoView({behavior:'smooth',block:'start'})
