@@ -57,7 +57,7 @@ h2{font-size:16px;margin:0 0 12px}.muted{color:var(--muted);font-size:12px;line-
 <div class="notice warn">実際の決済ではありません。遊び用の金額・残高だけを扱います。</div>
 </div>
 </div>
-<div class="card hidden" id="qrCard"><div class="subhead"><h2>お店のQR決済</h2><button class="btn secondary mini" id="closeQR">閉じる</button></div><p class="muted">お客さんのスマホでQRコードを読み取り、カード番号を入力してQR専用残高から支払います。支払い結果はFirebase経由でレジに反映されます。</p><div id="qrCode" style="display:flex;justify-content:center;padding:16px;min-height:80px"></div><div id="qrAmount" class="total" style="text-align:center"></div><div id="qrPayStatus" class="notice">QRコードを表示しています。お客さんの支払いを待っています。</div></div>
+<div class="card hidden" id="qrCard"><div class="subhead"><h2>印刷用・固定QR決済</h2><button class="btn secondary mini" id="closeQR">閉じる</button></div><p class="muted">この固定QRコードを印刷してお店に置けます。お客さんが読み取ると決済ページが開き、レジで開始した会計の金額が表示されます。</p><div id="qrCode" style="display:flex;justify-content:center;padding:16px;min-height:80px"></div><div id="qrAmount" class="total" style="text-align:center"></div><div id="qrPayStatus" class="notice">QRコードを表示しています。お客さんの支払いを待っています。</div></div>
 <div class="card hidden" id="receiptCard"><div class="subhead"><h2>レシート</h2><button class="btn secondary mini" id="printReceipt">印刷 / PDF</button></div><pre class="receipt" id="receiptText"></pre><button class="btn full" id="newSale">次のお客様</button></div>
 </section>
 
@@ -87,7 +87,6 @@ h2{font-size:16px;margin:0 0 12px}.muted{color:var(--muted);font-size:12px;line-
 </section>
 <div class="foot">新時代 POS • ごっこ遊び専用 • 実際のお金・銀行・決済サービスには接続しません</div>
 </main>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 const yen=n=>'¥'+Number(n||0).toLocaleString('ja-JP');
@@ -172,13 +171,12 @@ let currentQrRequestId=null;
 $('qrPay').onclick=()=>{
  if(!cart.length){setNotice('先に商品をカートに追加してください。',true);return}
  if(!window.syncShinposData){alert('Firebaseに接続できていません。同期状態を確認してください。');return}
- stopCamera();$('qrCard').classList.remove('hidden');$('qrAmount').textContent=yen(moneyTotal());$('qrCode').innerHTML='';
+ stopCamera();$('qrCard').classList.remove('hidden');$('qrAmount').textContent='今回のお会計：'+yen(moneyTotal());$('qrCode').innerHTML='';
+ const img=document.createElement('img');img.alt='印刷して使える固定QRコード';img.width=260;img.height=260;img.src='data:image/png;base64,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';$('qrCode').appendChild(img);
  const requestId='PAY-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);currentQrRequestId=requestId;
  paymentRequests=paymentRequests.filter(r=>r.status!=='pending');
  paymentRequests.push({id:requestId,amount:moneyTotal(),items:cart.map(x=>({barcode:x.barcode,name:x.name,qty:x.qty,price:x.price})),status:'pending',createdAt:new Date().toISOString()});persist();
- const payUrl=new URL(window.location.href);payUrl.search='';payUrl.hash='';payUrl.searchParams.set('pay',requestId);
- if(window.QRCode){new QRCode($('qrCode'),{text:payUrl.toString(),width:240,height:240,correctLevel:QRCode.CorrectLevel.M})}else{$('qrCode').textContent='QRコード作成ライブラリを読み込めません。インターネット接続を確認してください。'}
- $('qrPayStatus').textContent='お客さんの支払いを待っています。支払い完了後、この画面に反映されます。';$('qrCard').scrollIntoView({behavior:'smooth',block:'start'});
+ $('qrPayStatus').textContent='このQRは毎回同じです。印刷用ファイルも別に用意しました。お客さんの画面で今回のお会計が表示されます。';$('qrCard').scrollIntoView({behavior:'smooth',block:'start'});
 };
 $('closeQR').onclick=()=>$('qrCard').classList.add('hidden');
 function closePayment(){$('paymentArea').classList.add('hidden');paymentMode=''}
@@ -247,8 +245,10 @@ try {
   if (!first.exists()) await setDoc(storeRef, {...window.getShinposLocalData(), updatedAt: serverTimestamp()});
   else { applyingRemote=true; window.applyShinposRemoteData(first.data()); applyingRemote=false; }
 
-  const payId = new URLSearchParams(location.search).get('pay');
-  if (payId) {
+  const queryParams = new URLSearchParams(location.search);
+  const payId = queryParams.get('pay');
+  const customerMode = queryParams.get('customer') === '1';
+  if (payId || customerMode) {
     document.querySelector('header').innerHTML='<div class="brand"><div><small>ごっこ遊び専用・おもちゃのお金</small><h1>新時代 <span style="color:#d8ff70">QR決済</span></h1></div><span class="pill">お客さん画面</span></div>';
     document.querySelector('main').innerHTML=`<section class="card" style="margin-top:18px"><h2>お支払い内容</h2><div id="customerPayState" class="notice">決済内容を読み込んでいます…</div><div id="customerPayDetails"></div><label for="customerCardCode">新時代カード番号</label><input id="customerCardCode" class="field" autocomplete="off" placeholder="カードの番号を入力"><button id="customerCheckCard" class="btn secondary full" style="margin-top:10px">カードとQR残高を確認</button><div id="customerCardInfo" class="notice hidden"></div><button id="customerPayButton" class="btn lime full" style="margin-top:12px" disabled>QR専用残高で支払う</button><p class="muted">このアプリのおもちゃ残高を使うデモです。実際のお金や決済サービスには接続しません。</p></section>`;
     let currentRequest=null,currentCardBarcode='';
@@ -256,8 +256,8 @@ try {
     const fmt=n=>'¥'+Number(n||0).toLocaleString('ja-JP');
     const readStore=async()=>{const snap=await getDoc(storeRef);return snap.exists()?snap.data():null};
     const escapeText=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-    const refreshRequest=async()=>{try{const data=await readStore();currentRequest=(data?.paymentRequests||[]).find(r=>r.id===payId)||null;
-      if(!currentRequest){state.textContent='このQR決済は見つかりません。レジで新しいQRコードを表示してください。';payButton.disabled=true;return}
+    const refreshRequest=async()=>{try{const data=await readStore();currentRequest=payId?(data?.paymentRequests||[]).find(r=>r.id===payId)||null:(data?.paymentRequests||[]).filter(r=>r.status==='pending').sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))[0]||null;
+      if(!currentRequest){state.textContent='レジで会計を開始すると、ここに支払い金額が表示されます。このページを開いたままお待ちください。';details.innerHTML='';payButton.disabled=true;return}
       if(currentRequest.status==='paid'){state.textContent='支払い完了！レジに自動反映されました。';state.style.background='#e2f6e8';payButton.disabled=true;return}
       if(currentRequest.status==='cancelled'){state.textContent='この支払いリクエストはキャンセルされました。';payButton.disabled=true;return}
       state.textContent='お支払い合計：'+fmt(currentRequest.amount);
