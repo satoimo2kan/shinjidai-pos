@@ -58,7 +58,7 @@ h2{font-size:16px;margin:0 0 12px}.muted{color:var(--muted);font-size:12px;line-
 <div class="notice warn">実際の決済ではありません。遊び用の金額・残高だけを扱います。</div>
 </div>
 </div>
-<div class="card hidden" id="qrCard"><div class="subhead"><h2>会計ごとのQR決済</h2><button class="btn secondary mini" id="closeQR">閉じる</button></div><p class="muted">会計ごとに専用QRコードを発行します。お客さんが読み取ると、その会計の支払いページが開きます。</p><div id="qrCode" style="display:flex;justify-content:center;padding:16px;min-height:80px"></div><div id="qrAmount" class="total" style="text-align:center"></div><div id="qrPayStatus" class="notice">QRコードを表示しています。お客さんの支払いを待っています。</div></div>
+<div class="card hidden" id="qrCard"><div class="subhead"><h2>会計ごとのQR決済</h2><button class="btn secondary mini" id="closeQR">閉じる</button></div><p class="muted">会計ごとに専用QRコードを発行します。お客さんが読み取ると、その会計の支払いページが開きます。</p><div id="qrCode" style="display:flex;justify-content:center;padding:16px;min-height:80px"></div><div id="qrAmount" class="total" style="text-align:center"></div><div id="qrPayStatus" class="notice">QRコードを表示しています。お客さんの支払いを待っています。</div><div class="divider"></div><h3>店員用：残高不足の対応</h3><p class="muted">お客さんのカード番号を入力して、QR専用残高のチャージ、または不足分の現金払いを処理します。</p><label for="qrStaffCardCode">新時代カード番号</label><input class="field" id="qrStaffCardCode" autocomplete="off" placeholder="お客さんのカード番号"><div class="actions" style="margin-top:10px"><button class="btn secondary" id="qrStaffCharge">QR残高をチャージ</button><button class="btn secondary" id="qrStaffCashSplit">不足分を現金で支払う</button></div><div id="qrStaffHelp" class="notice" style="margin-top:10px">カード番号を入力して操作してください。チャージはQR専用残高だけに加算されます。</div></div>
 <div class="card hidden" id="receiptCard"><div class="subhead"><h2>レシート</h2><button class="btn secondary mini" id="printReceipt">印刷 / PDF</button></div><pre class="receipt" id="receiptText"></pre><button class="btn full" id="newSale">次のお客様</button></div>
 </section>
 
@@ -183,6 +183,41 @@ $('qrPay').onclick=()=>{
  $('qrPayStatus').textContent='会計専用QRコードです。お客さんが読み取ると、この会計の金額が表示されます。QR専用残高から支払います。';$('qrPayStatus').className='notice';$('qrCard').scrollIntoView({behavior:'smooth',block:'start'});
 };
 $('closeQR').onclick=()=>$('qrCard').classList.add('hidden');
+function getQrStaffContext(){
+ const code=$('qrStaffCardCode')?.value.trim();
+ if(!currentQrRequestId){alert('先にレジでQR決済を開始してください。');return null}
+ const req=paymentRequests.find(r=>r.id===currentQrRequestId);
+ if(!req||req.status!=='pending'){alert('このQR決済は処理済み、または見つかりません。');return null}
+ const c=cards.find(x=>x.barcode===code);
+ if(!code||!c){alert('登録済みの新時代カード番号を入力してください。');return null}
+ const total=Number(req.amount)||0, balance=Number(c.qrBalance||0), short=Math.max(0,total-balance);
+ return {req,c,total,balance,short};
+}
+$('qrStaffCharge').onclick=()=>{
+ const ctx=getQrStaffContext();if(!ctx)return;
+ if(ctx.short<=0){alert('QR専用残高は不足していません。お客さんがQRコードから支払いを進めてください。');return}
+ const raw=prompt('QR専用残高にチャージする金額（不足額 '+yen(ctx.short)+' 以上）',String(ctx.short));if(raw===null)return;
+ if(raw.trim()===''){alert('チャージ金額を入力してください。');return}
+ const amount=Number(raw);if(!Number.isFinite(amount)||amount<ctx.short||amount<=0){alert('不足額以上の金額を入力してください。');return}
+ ctx.c.qrBalance=ctx.balance+Math.floor(amount);persist();renderAll();
+ $('qrStaffHelp').textContent=ctx.c.name+' のQR専用残高に '+yen(Math.floor(amount))+' チャージしました。新しい残高：'+yen(ctx.c.qrBalance)+'。お客さんは表示中のQRコードから支払いを完了してください。';
+};
+$('qrStaffCashSplit').onclick=()=>{
+ const ctx=getQrStaffContext();if(!ctx)return;
+ if(ctx.short<=0){alert('QR専用残高が不足していません。お客さんはQRコードから通常どおり支払えます。');return}
+ const raw=prompt('現金で受け取る金額（必要額 '+yen(ctx.short)+' 以上）',String(ctx.short));if(raw===null)return;
+ if(raw.trim()===''){alert('現金の金額を入力してください。');return}
+ const given=Number(raw);if(!Number.isFinite(given)||given<ctx.short){alert('現金で受け取る金額は不足額 '+yen(ctx.short)+' 以上にしてください。');return}
+ if(!confirm('QR専用残高 '+yen(ctx.balance)+' と現金 '+yen(ctx.short)+' で会計 '+yen(ctx.total)+' を確定しますか？'))return;
+ // QR残高と現金を組み合わせてレジ側で会計を確定する
+ ctx.c.qrBalance=0;ctx.c.points=(ctx.c.points||0)+Math.floor(ctx.total/100);
+ ctx.req.status='paid';ctx.req.paidAt=new Date().toISOString();ctx.req.cardName=ctx.c.name;ctx.req.method='QR残高＋現金';ctx.req.qrPaid=ctx.balance;ctx.req.cashPaid=ctx.short;
+ ctx.req.given=given;ctx.req.change=given-ctx.short;
+ ctx.req.items.forEach(x=>{const p=lookupProduct(x.barcode);if(p)p.stock=Math.max(0,p.stock-x.qty)});
+ const sale={id:Date.now(),date:new Date().toLocaleString('ja-JP'),items:ctx.req.items.map(x=>({...x})),total:ctx.total,method:'QR残高＋現金',given,change:given-ctx.short,cardName:ctx.c.name,cardPaid:ctx.balance,cashPaid:ctx.short};
+ sales.unshift(sale);persist();$('qrPayStatus').textContent='会計完了：QR残高 '+yen(ctx.balance)+' ＋ 現金 '+yen(ctx.short)+'。お客さん側のQR画面にも支払い完了が反映されます。';$('qrPayStatus').style.background='#e2f6e8';$('qrStaffHelp').textContent='会計を確定しました。QR残高 '+yen(ctx.balance)+'、現金 '+yen(ctx.short)+'。お釣り：'+yen(given-ctx.short)+'。';
+ $('receiptText').textContent=makeReceipt(sale);$('receiptCard').classList.remove('hidden');renderAll();
+};
 function closePayment(){$('paymentArea').classList.add('hidden');paymentMode=''}
 $('cancelPay').onclick=closePayment;
 $('completePay').onclick=()=>{
@@ -194,7 +229,7 @@ $('completePay').onclick=()=>{
  const splitPaid=method==='カード＋現金';const sale={id:Date.now(),date:new Date().toLocaleString('ja-JP'),items:cart.map(x=>({...x})),total,method,given,change,cardName,cardPaid:splitPaid?Math.max(0,total-(given-change)):total,cashPaid:splitPaid?given-change:(method==='現金'?total:0)};sales.unshift(sale);persist();
  $('receiptText').textContent=makeReceipt(sale);$('receiptCard').classList.remove('hidden');closePayment();stopCamera();renderAll();$('receiptCard').scrollIntoView({behavior:'smooth',block:'start'})
 };
-function makeReceipt(s){return '       新時代 POS\n      お買い上げレシート\n------------------------------\n'+s.date+'\n'+s.items.map(x=>x.name+' × '+x.qty+'\n  '+yen(x.price)+' × '+x.qty+'     '+yen(x.price*x.qty)).join('\n')+'\n------------------------------\n合計             '+yen(s.total)+'\nお支払い         '+s.method+(s.cardName?'（'+s.cardName+'）':'')+(s.method==='現金'?'\nお預かり         '+yen(s.given)+'\nお釣り           '+yen(s.change):s.method==='カード＋現金'?'\nカード支払       '+yen(s.cardPaid)+'\n現金支払         '+yen(s.cashPaid)+'\n現金お預かり     '+yen(s.given)+'\nお釣り           '+yen(s.change):'')+'\n\nごっこ遊びをご利用いただき\nありがとうございます！\n※おもちゃ用レシートです'}
+function makeReceipt(s){return '       新時代 POS\n      お買い上げレシート\n------------------------------\n'+s.date+'\n'+s.items.map(x=>x.name+' × '+x.qty+'\n  '+yen(x.price)+' × '+x.qty+'     '+yen(x.price*x.qty)).join('\n')+'\n------------------------------\n合計             '+yen(s.total)+'\nお支払い         '+s.method+(s.cardName?'（'+s.cardName+'）':'')+(s.method==='現金'?'\nお預かり         '+yen(s.given)+'\nお釣り           '+yen(s.change):(s.method==='カード＋現金'||s.method==='QR残高＋現金')?'\n残高支払         '+yen(s.cardPaid)+'\n現金支払         '+yen(s.cashPaid)+'\n現金お預かり     '+yen(s.given)+'\nお釣り           '+yen(s.change):'')+'\n\nごっこ遊びをご利用いただき\nありがとうございます！\n※おもちゃ用レシートです'}
 $('printReceipt').onclick=()=>window.print();
 $('newSale').onclick=()=>{cart=[];renderCart();$('receiptCard').classList.add('hidden');setNotice('次のお客様をお迎えできます。');window.scrollTo({top:0,behavior:'smooth'})};
 $('saveProduct').onclick=()=>{
