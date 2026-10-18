@@ -64,7 +64,11 @@ h2{font-size:16px;margin:0 0 12px}.muted{color:var(--muted);font-size:12px;line-
 
 <section class="panel" id="products">
 <div class="card"><h2>商品を登録・編集</h2><p class="muted">お店の商品に貼ったバーコード番号と価格を登録します。デモ商品は最初から入っています。</p>
-<label for="pBarcode">バーコード番号（重複しない番号）</label><input class="field" id="pBarcode" placeholder="例：490000000004">
+<label for="pBarcode">バーコード番号（重複しない番号）</label>
+<div class="scanrow"><input class="field" id="pBarcode" inputmode="numeric" autocomplete="off" placeholder="例：490000000004"><button class="btn secondary" type="button" id="scanProductBarcode">▦ 読み取り</button></div>
+<div class="video-wrap" id="productVideoWrap"><video id="productVideo" playsinline muted></video><div class="scanlabel">商品のバーコードを枠内に合わせてね</div></div>
+<div class="actions" id="productScanActions" style="margin-top:7px;display:none"><button class="btn secondary" type="button" id="stopProductScan">読み取り停止</button></div>
+<div class="muted" id="productScanNotice">カメラで読み取るか、番号を直接入力できます。カメラ利用にはHTTPSとブラウザの許可が必要です。</div>
 <label for="pName">商品名</label><input class="field" id="pName" placeholder="例：お茶 500ml">
 <label for="pPrice">価格（円）</label><input class="field" id="pPrice" inputmode="numeric" type="number" min="0" placeholder="150">
 <label for="pStock">在庫数</label><input class="field" id="pStock" inputmode="numeric" type="number" min="0" placeholder="20">
@@ -139,7 +143,7 @@ function renderCart(){
  const bs=d.querySelectorAll('.qty button');bs[0].onclick=()=>{x.qty--;if(x.qty<=0)cart=cart.filter(y=>y.barcode!==x.barcode);renderCart()};bs[1].onclick=()=>{const p=lookupProduct(x.barcode);if(p&&x.qty>=p.stock){setNotice('在庫数を超えています。',true);return}x.qty++;renderCart()};d.querySelector('.itemright button').onclick=()=>{cart=cart.filter(y=>y.barcode!==x.barcode);renderCart()};$('cartItems').appendChild(d)})
 }
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===b.dataset.tab));stopCamera();renderAll()});
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{stopProductBarcodeScan();document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===b.dataset.tab));stopCamera();renderAll()});
 $('manualToggle').onclick=()=>{$('manualArea').classList.toggle('hidden');if(!$('manualArea').classList.contains('hidden'))$('barcodeInput').focus()};
 $('addBarcode').onclick=()=>{beep();addProduct($('barcodeInput').value)};
 $('barcodeInput').addEventListener('keydown',e=>{if(e.key==='Enter')addProduct(e.target.value)});
@@ -244,6 +248,29 @@ $('saveProduct').onclick=()=>{
 };
 function clearProductForm(){editingBarcode=null;['pBarcode','pName','pPrice','pStock'].forEach(id=>$(id).value='');$('pBarcode').disabled=false;$('saveProduct').textContent='商品を登録';$('cancelEdit').classList.add('hidden')}
 $('cancelEdit').onclick=clearProductForm;
+let productScanStream=null,productScanFrame=null,productScanBusy=false;
+async function startProductBarcodeScan(){
+ if(!navigator.mediaDevices?.getUserMedia){$('productScanNotice').textContent='このブラウザではカメラを利用できません。HTTPSで開くか、番号を直接入力してください。';return}
+ if(!('BarcodeDetector' in window)){$('productScanNotice').textContent='このブラウザはバーコード自動検出に未対応です。Chromeなどの対応ブラウザか、番号入力をご利用ください。';return}
+ try{
+  const supported=await BarcodeDetector.getSupportedFormats();
+  const formats=['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf'].filter(x=>supported.includes(x));
+  if(!formats.length)throw new Error('このカメラで読めるバーコード形式がありません');
+  const detector=new BarcodeDetector({formats});
+  productScanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+  const video=$('productVideo');video.srcObject=productScanStream;
+  $('productVideoWrap').style.display='block';$('productScanActions').style.display='grid';$('scanProductBarcode').textContent='■ 読み取り中';
+  await video.play();$('productScanNotice').textContent='バーコードを枠内に合わせてください。読み取ると番号欄に自動入力されます。';
+  const tick=async()=>{
+   if(!productScanStream||productScanBusy)return;
+   try{const codes=await detector.detect(video);if(codes.length&&codes[0].rawValue){productScanBusy=true;$('pBarcode').value=codes[0].rawValue;$('productScanNotice').textContent='読み取り成功：'+codes[0].rawValue+'。商品名・価格・在庫を入力して登録してください。';stopProductBarcodeScan();$('pName').focus();return}}catch(e){}
+   if(productScanStream)productScanFrame=requestAnimationFrame(tick);
+  };productScanBusy=false;tick();
+ }catch(e){stopProductBarcodeScan();$('productScanNotice').textContent='カメラを起動できませんでした。ブラウザのカメラ許可を確認するか、番号を直接入力してください。';}
+}
+function stopProductBarcodeScan(){if(productScanFrame)cancelAnimationFrame(productScanFrame);productScanFrame=null;if(productScanStream){productScanStream.getTracks().forEach(t=>t.stop());productScanStream=null}$('productVideo').srcObject=null;$('productVideoWrap').style.display='none';$('productScanActions').style.display='none';$('scanProductBarcode').textContent='▦ 読み取り';productScanBusy=false}
+$('scanProductBarcode').onclick=()=>productScanStream?stopProductBarcodeScan():startProductBarcodeScan();
+$('stopProductScan').onclick=stopProductBarcodeScan;
 function editProduct(code){const p=lookupProduct(code);if(!p)return;editingBarcode=code;$('pBarcode').value=p.barcode;$('pBarcode').disabled=true;$('pName').value=p.name;$('pPrice').value=p.price;$('pStock').value=p.stock;$('saveProduct').textContent='変更を保存';$('cancelEdit').classList.remove('hidden');$('pName').focus();window.scrollTo({top:0,behavior:'smooth'})}
 function renderProducts(){$('productCount').textContent=products.length+'商品';$('productList').innerHTML='';products.forEach(p=>{const d=document.createElement('div');d.className='item';d.innerHTML=`<div><strong>${esc(p.name)}</strong><small>${esc(p.barcode)} / 在庫 ${p.stock}${Number(p.stock)<=5?' ⚠ 在庫少':''}</small></div><div class="itemright">${yen(p.price)}<br><button class="btn secondary mini">編集</button> <button class="btn red mini">削除</button></div>`;d.querySelectorAll('button')[0].onclick=()=>editProduct(p.barcode);d.querySelectorAll('button')[1].onclick=()=>{if(confirm(p.name+' を削除しますか？')){products=products.filter(x=>x.barcode!==p.barcode);persist();renderAll()}};$('productList').appendChild(d)})}
 $('saveCard').onclick=()=>{const barcode=$('cBarcode').value.trim(),name=$('cName').value.trim(),balance=Number($('cBalance').value),qrBalance=Number($('cQrBalance').value||0);if(!barcode||!name||$('cBalance').value===''||balance<0||!Number.isFinite(balance)||qrBalance<0||!Number.isFinite(qrBalance)){alert('カード番号・カード名・残高を入力してください。');return}if(cards.some(c=>c.barcode===barcode)){alert('このカード番号は登録済みです。');return}cards.push({barcode,name,balance:Math.floor(balance),qrBalance:Math.floor(qrBalance),points:0});persist();$('cBarcode').value='';$('cName').value='';$('cBalance').value='';$('cQrBalance').value='';renderAll();alert('カードを登録しました。')};
@@ -311,13 +338,19 @@ try {
       try{await runTransaction(db,async tx=>{const snap=await tx.get(storeRef);if(!snap.exists())throw new Error('データがありません');const data=snap.data(),requests=data.paymentRequests||[],ri=requests.findIndex(r=>r.id===payId);if(ri<0)throw new Error('QR決済が見つかりません');if(requests[ri].status!=='pending')throw new Error('このQR決済はすでに処理されています');
         const cards=data.cards||[],ci=cards.findIndex(c=>c.barcode===currentCardBarcode);if(ci<0)throw new Error('カードが見つかりません');const total=Number(requests[ri].amount),bal=Number(cards[ci].qrBalance||0);if(bal<total)throw new Error('QR専用残高が不足しています');
         cards[ci]={...cards[ci],qrBalance:bal-total,points:(cards[ci].points||0)+Math.floor(total/100)};const products=data.products||[];(requests[ri].items||[]).forEach(item=>{const pi=products.findIndex(p=>p.barcode===item.barcode);if(pi>=0)products[pi]={...products[pi],stock:Math.max(0,Number(products[pi].stock||0)-Number(item.qty||0))};});
-        const sales=data.sales||[];sales.unshift({id:Date.now(),date:new Date().toLocaleString('ja-JP'),items:requests[ri].items||[],total,method:'QR決済（QR専用残高）',given:0,change:0,cardName:cards[ci].name,cardPaid:total,cashPaid:0});requests[ri]={...requests[ri],status:'paid',paidAt:new Date().toISOString(),cardName:cards[ci].name};tx.set(storeRef,{...data,cards,products,sales,paymentRequests:requests,updatedAt:serverTimestamp()});});
+        const sales=data.sales||[];const saleId=Date.now();const sale={id:saleId,date:new Date().toLocaleString('ja-JP'),items:requests[ri].items||[],total,method:'QR決済（QR専用残高）',given:0,change:0,cardName:cards[ci].name,cardPaid:total,cashPaid:0};sales.unshift(sale);requests[ri]={...requests[ri],status:'paid',paidAt:new Date().toISOString(),cardName:cards[ci].name,saleId};tx.set(storeRef,{...data,cards,products,sales,paymentRequests:requests,updatedAt:serverTimestamp()});});
         state.textContent='支払い完了！レジに自動反映されました。';state.style.background='#e2f6e8';info.textContent='QR専用残高から支払い済みです。';
       }catch(e){state.textContent=e.message||'支払いに失敗しました。';info.classList.remove('hidden');payButton.disabled=false;}};
     await refreshRequest();onSnapshot(storeRef,snap=>{if(snap.exists()){refreshRequest()}},err=>{state.textContent='同期エラー：レジ担当者に確認してください。'});
   } else {
+    let lastHandledQrPaidId=null;
     onSnapshot(storeRef,snap=>{if(!snap.exists())return;const data=snap.data();applyingRemote=true;window.applyShinposRemoteData(data);applyingRemote=false;ready=true;setStatus('☁ 同期中');
-      if(currentQrRequestId){const req=(data.paymentRequests||[]).find(r=>r.id===currentQrRequestId);if(req?.status==='paid'){$('qrPayStatus').textContent='支払い完了！カード残高・在庫・売上を更新しました。';$('qrPayStatus').style.background='#e2f6e8';}}
+      if(currentQrRequestId){const req=(data.paymentRequests||[]).find(r=>r.id===currentQrRequestId);if(req?.status==='paid'){
+        $('qrPayStatus').textContent='支払い完了！カード残高・在庫・売上を更新しました。';$('qrPayStatus').style.background='#e2f6e8';
+        if(lastHandledQrPaidId!==req.id){lastHandledQrPaidId=req.id;const sale=(data.sales||[]).find(x=>x.id===req.saleId)||{id:req.saleId||Date.now(),date:new Date().toLocaleString('ja-JP'),items:req.items||[],total:Number(req.amount)||0,method:'QR決済（QR専用残高）',given:0,change:0,cardName:req.cardName||'',cardPaid:Number(req.amount)||0,cashPaid:0};
+          $('receiptText').textContent=makeReceipt(sale);$('receiptCard').classList.remove('hidden');cart=[];renderCart();$('qrCard').classList.add('hidden');$('receiptCard').scrollIntoView({behavior:'smooth',block:'start'});
+        }
+      }}
     },err=>{console.error(err);setStatus('同期エラー',true)});
     window.syncShinposData=data=>{if(!ready||applyingRemote)return;writeQueue=writeQueue.then(async()=>{const snap=await getDoc(storeRef),existing=snap.exists()?snap.data():{};await setDoc(storeRef,{...existing,...data,updatedAt:serverTimestamp()})}).then(()=>setStatus('☁ 同期済み')).catch(err=>{console.error(err);setStatus('保存失敗',true)});};
     setStatus('☁ 接続完了');
