@@ -57,7 +57,7 @@ h2{font-size:16px;margin:0 0 12px}.muted{color:var(--muted);font-size:12px;line-
 <div class="notice warn">実際の決済ではありません。遊び用の金額・残高だけを扱います。</div>
 </div>
 </div>
-<div class="card hidden" id="qrCard"><div class="subhead"><h2>お店のQR決済</h2><button class="btn secondary mini" id="closeQR">閉じる</button></div><p class="muted">お客さんのスマホで読み取ってね。これは決済リクエスト表示の試作品です。別端末で残高を引き落とし、レジへ自動反映するにはFirebase接続が必要です。</p><div id="qrCode" style="display:flex;justify-content:center;padding:16px;min-height:80px"></div><div id="qrAmount" class="total" style="text-align:center"></div><div class="notice warn">まだ支払いは実行されません。Firebase接続後にQR専用残高・支払い確定・売上反映を有効化します。</div></div>
+<div class="card hidden" id="qrCard"><div class="subhead"><h2>お店のQR決済</h2><button class="btn secondary mini" id="closeQR">閉じる</button></div><p class="muted">お客さんのスマホでQRコードを読み取り、カード番号を入力してQR専用残高から支払います。支払い結果はFirebase経由でレジに反映されます。</p><div id="qrCode" style="display:flex;justify-content:center;padding:16px;min-height:80px"></div><div id="qrAmount" class="total" style="text-align:center"></div><div id="qrPayStatus" class="notice">QRコードを表示しています。お客さんの支払いを待っています。</div></div>
 <div class="card hidden" id="receiptCard"><div class="subhead"><h2>レシート</h2><button class="btn secondary mini" id="printReceipt">印刷 / PDF</button></div><pre class="receipt" id="receiptText"></pre><button class="btn full" id="newSale">次のお客様</button></div>
 </section>
 
@@ -87,6 +87,7 @@ h2{font-size:16px;margin:0 0 12px}.muted{color:var(--muted);font-size:12px;line-
 </section>
 <div class="foot">新時代 POS • ごっこ遊び専用 • 実際のお金・銀行・決済サービスには接続しません</div>
 </main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 const yen=n=>'¥'+Number(n||0).toLocaleString('ja-JP');
@@ -97,10 +98,10 @@ const defaultProducts=[
 ];
 function load(key,fallback){try{const v=localStorage.getItem('shinpos_'+key);return v?JSON.parse(v):fallback}catch(e){return fallback}}
 function save(key,v){try{localStorage.setItem('shinpos_'+key,JSON.stringify(v))}catch(e){}}
-let products=load('products',defaultProducts),cards=load('cards',[]),sales=load('sales',[]),cart=[],paymentMode='',editingBarcode=null,stream=null,scanLoop=null,scanPurpose='product';
-function persist(){save('products',products);save('cards',cards);save('sales',sales);if(window.syncShinposData)window.syncShinposData({products,cards,sales})}
-window.applyShinposRemoteData=function(data){if(!data||typeof data!=='object')return;if(Array.isArray(data.products))products=data.products;if(Array.isArray(data.cards))cards=data.cards;if(Array.isArray(data.sales))sales=data.sales;save('products',products);save('cards',cards);save('sales',sales);renderAll();};
-window.getShinposLocalData=function(){return {products,cards,sales};}
+let products=load('products',defaultProducts),cards=load('cards',[]),sales=load('sales',[]),paymentRequests=load('paymentRequests',[]),cart=[],paymentMode='',editingBarcode=null,stream=null,scanLoop=null,scanPurpose='product';
+function persist(){save('products',products);save('cards',cards);save('sales',sales);save('paymentRequests',paymentRequests);if(window.syncShinposData)window.syncShinposData({products,cards,sales,paymentRequests})}
+window.applyShinposRemoteData=function(data){if(!data||typeof data!=='object')return;if(Array.isArray(data.products))products=data.products;if(Array.isArray(data.cards))cards=data.cards;if(Array.isArray(data.sales))sales=data.sales;if(Array.isArray(data.paymentRequests))paymentRequests=data.paymentRequests;save('products',products);save('cards',cards);save('sales',sales);save('paymentRequests',paymentRequests);renderAll();};
+window.getShinposLocalData=function(){return {products,cards,sales,paymentRequests};}
 function moneyTotal(){return cart.reduce((s,x)=>s+x.price*x.qty,0)}
 let scanAudioContext=null;
 // 読み取り成功・残高不足・未登録・一般エラーを音で区別する
@@ -167,7 +168,19 @@ function openPayment(mode){
 }
 function showCardInfo(){const box=$('cardInfo');box.dataset.split='no';const c=cards.find(c=>c.barcode===$('cardCode').value.trim());if(!c){playTone('unknown');box.textContent='カードが見つかりません。カード管理で登録してください。';box.dataset.valid='no';return}const short=Math.max(0,moneyTotal()-c.balance);if(short>0)playTone('low');box.dataset.valid=c.balance>=moneyTotal()?'yes':'no';box.innerHTML=`<strong>${esc(c.name)}</strong> / 残高 ${yen(c.balance)}${short?' / 不足 '+yen(short):' / 支払い可能'}${short?`<div class="actions" style="margin-top:9px"><button class="btn secondary" id="chargeForPay">チャージして払う</button><button class="btn secondary" id="splitForPay">不足分を現金で払う</button></div><div id="splitCashArea" class="hidden" style="margin-top:8px"><label for="splitCashGiven">現金で支払う金額（必要額 ${yen(short)}）</label><input class="field" id="splitCashGiven" type="number" min="${short}" value="${short}"><p class="muted">カード残高 ${yen(c.balance)} ＋ 現金 ${yen(short)} ＝ 合計 ${yen(moneyTotal())}</p></div>`:''}`;const charge=$('chargeForPay');if(charge)charge.onclick=()=>{const n=prompt('チャージする金額（円）',String(short));if(n===null)return;const v=Number(n);if(!Number.isFinite(v)||v<short||v<=0){alert('不足額以上の金額を入力してください。');return}c.balance+=Math.floor(v);persist();showCardInfo()};const split=$('splitForPay');if(split)split.onclick=()=>{$('splitCashArea').classList.remove('hidden');box.dataset.split='yes';};box.dataset.split=box.dataset.split||'no';}
 $('cashPay').onclick=()=>openPayment('cash');$('cardPay').onclick=()=>openPayment('card');
-$('qrPay').onclick=()=>{if(!cart.length){setNotice('先に商品をカートに追加してください。',true);return}stopCamera();$('qrCard').classList.remove('hidden');$('qrAmount').textContent=yen(moneyTotal());$('qrCode').innerHTML='';const payload=JSON.stringify({type:'shinpos-demo-payment',amount:moneyTotal(),items:cart.map(x=>({name:x.name,qty:x.qty,price:x.price})),requestId:'PAY-'+Date.now(),createdAt:new Date().toISOString()});if(window.QRCode){new QRCode($('qrCode'),{text:payload,width:220,height:220,correctLevel:QRCode.CorrectLevel.M})}else{$('qrCode').textContent='QR生成ライブラリを読み込めませんでした。インターネット接続を確認してください.'}$('qrCard').scrollIntoView({behavior:'smooth',block:'start'})};$('closeQR').onclick=()=>$('qrCard').classList.add('hidden');
+let currentQrRequestId=null;
+$('qrPay').onclick=()=>{
+ if(!cart.length){setNotice('先に商品をカートに追加してください。',true);return}
+ if(!window.syncShinposData){alert('Firebaseに接続できていません。同期状態を確認してください。');return}
+ stopCamera();$('qrCard').classList.remove('hidden');$('qrAmount').textContent=yen(moneyTotal());$('qrCode').innerHTML='';
+ const requestId='PAY-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);currentQrRequestId=requestId;
+ paymentRequests=paymentRequests.filter(r=>r.status!=='pending');
+ paymentRequests.push({id:requestId,amount:moneyTotal(),items:cart.map(x=>({barcode:x.barcode,name:x.name,qty:x.qty,price:x.price})),status:'pending',createdAt:new Date().toISOString()});persist();
+ const payUrl=new URL(window.location.href);payUrl.search='';payUrl.hash='';payUrl.searchParams.set('pay',requestId);
+ if(window.QRCode){new QRCode($('qrCode'),{text:payUrl.toString(),width:240,height:240,correctLevel:QRCode.CorrectLevel.M})}else{$('qrCode').textContent='QRコード作成ライブラリを読み込めません。インターネット接続を確認してください。'}
+ $('qrPayStatus').textContent='お客さんの支払いを待っています。支払い完了後、この画面に反映されます。';$('qrCard').scrollIntoView({behavior:'smooth',block:'start'});
+};
+$('closeQR').onclick=()=>$('qrCard').classList.add('hidden');
 function closePayment(){$('paymentArea').classList.add('hidden');paymentMode=''}
 $('cancelPay').onclick=closePayment;
 $('completePay').onclick=()=>{
@@ -210,7 +223,7 @@ $('adminToggle').onclick=()=>{const pin=$('adminPin').value;if(pin==='1234'){adm
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyALVQnUGdW-nPDReeIUS5a30FtqMSpCmwk",
@@ -228,34 +241,48 @@ try {
   const auth = getAuth(app);
   const db = getFirestore(app);
   const storeRef = doc(db, 'stores', 'sinjidai-pos');
-  let ready = false;
-  let writeQueue = Promise.resolve();
-  let applyingRemote = false;
+  let ready = false, writeQueue = Promise.resolve(), applyingRemote = false;
   await signInAnonymously(auth);
   const first = await getDoc(storeRef);
-  if (!first.exists()) {
-    const initial = window.getShinposLocalData();
-    await setDoc(storeRef, {...initial, updatedAt: serverTimestamp()});
+  if (!first.exists()) await setDoc(storeRef, {...window.getShinposLocalData(), updatedAt: serverTimestamp()});
+  else { applyingRemote=true; window.applyShinposRemoteData(first.data()); applyingRemote=false; }
+
+  const payId = new URLSearchParams(location.search).get('pay');
+  if (payId) {
+    document.querySelector('header').innerHTML='<div class="brand"><div><small>ごっこ遊び専用・おもちゃのお金</small><h1>新時代 <span style="color:#d8ff70">QR決済</span></h1></div><span class="pill">お客さん画面</span></div>';
+    document.querySelector('main').innerHTML=`<section class="card" style="margin-top:18px"><h2>お支払い内容</h2><div id="customerPayState" class="notice">決済内容を読み込んでいます…</div><div id="customerPayDetails"></div><label for="customerCardCode">新時代カード番号</label><input id="customerCardCode" class="field" autocomplete="off" placeholder="カードの番号を入力"><button id="customerCheckCard" class="btn secondary full" style="margin-top:10px">カードとQR残高を確認</button><div id="customerCardInfo" class="notice hidden"></div><button id="customerPayButton" class="btn lime full" style="margin-top:12px" disabled>QR専用残高で支払う</button><p class="muted">このアプリのおもちゃ残高を使うデモです。実際のお金や決済サービスには接続しません。</p></section>`;
+    let currentRequest=null,currentCardBarcode='';
+    const state=document.getElementById('customerPayState'),details=document.getElementById('customerPayDetails'),info=document.getElementById('customerCardInfo'),payButton=document.getElementById('customerPayButton');
+    const fmt=n=>'¥'+Number(n||0).toLocaleString('ja-JP');
+    const readStore=async()=>{const snap=await getDoc(storeRef);return snap.exists()?snap.data():null};
+    const escapeText=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const refreshRequest=async()=>{try{const data=await readStore();currentRequest=(data?.paymentRequests||[]).find(r=>r.id===payId)||null;
+      if(!currentRequest){state.textContent='このQR決済は見つかりません。レジで新しいQRコードを表示してください。';payButton.disabled=true;return}
+      if(currentRequest.status==='paid'){state.textContent='支払い完了！レジに自動反映されました。';state.style.background='#e2f6e8';payButton.disabled=true;return}
+      if(currentRequest.status==='cancelled'){state.textContent='この支払いリクエストはキャンセルされました。';payButton.disabled=true;return}
+      state.textContent='お支払い合計：'+fmt(currentRequest.amount);
+      details.innerHTML='<div class="items">'+(currentRequest.items||[]).map(x=>`<div class="item"><div><strong>${escapeText(x.name)} × ${x.qty}</strong></div><div class="itemright">${fmt(x.price*x.qty)}</div></div>`).join('')+'</div><div class="total" style="text-align:center;margin:16px 0">'+fmt(currentRequest.amount)+'</div>';
+    }catch(e){state.textContent='通信エラーです。インターネット接続を確認して再読み込みしてください。'}};
+    document.getElementById('customerCheckCard').onclick=async()=>{const code=document.getElementById('customerCardCode').value.trim();currentCardBarcode=code;payButton.disabled=true;info.classList.remove('hidden');
+      try{const data=await readStore(),c=(data?.cards||[]).find(x=>x.barcode===code);if(!c){info.textContent='カードが見つかりません。番号を確認してください。';return}
+        const bal=Number(c.qrBalance||0);info.textContent=c.name+'：QR専用残高 '+fmt(bal)+(currentRequest?' / 必要額 '+fmt(currentRequest.amount):'');
+        if(currentRequest?.status==='pending'&&bal>=Number(currentRequest.amount)){payButton.disabled=false;info.textContent+='。支払いできます。'}else if(currentRequest&&bal<Number(currentRequest.amount)){info.textContent+='。QR専用残高が不足しています。通常カード残高や現金はこのQR決済では使いません。'}
+      }catch(e){info.textContent='カード情報を読み込めませんでした。通信状態を確認してください。'}};
+    payButton.onclick=async()=>{payButton.disabled=true;state.textContent='支払いを処理しています…';
+      try{await runTransaction(db,async tx=>{const snap=await tx.get(storeRef);if(!snap.exists())throw new Error('データがありません');const data=snap.data(),requests=data.paymentRequests||[],ri=requests.findIndex(r=>r.id===payId);if(ri<0)throw new Error('QR決済が見つかりません');if(requests[ri].status!=='pending')throw new Error('このQR決済はすでに処理されています');
+        const cards=data.cards||[],ci=cards.findIndex(c=>c.barcode===currentCardBarcode);if(ci<0)throw new Error('カードが見つかりません');const total=Number(requests[ri].amount),bal=Number(cards[ci].qrBalance||0);if(bal<total)throw new Error('QR専用残高が不足しています');
+        cards[ci]={...cards[ci],qrBalance:bal-total,points:(cards[ci].points||0)+Math.floor(total/100)};const products=data.products||[];(requests[ri].items||[]).forEach(item=>{const pi=products.findIndex(p=>p.barcode===item.barcode);if(pi>=0)products[pi]={...products[pi],stock:Math.max(0,Number(products[pi].stock||0)-Number(item.qty||0))};});
+        const sales=data.sales||[];sales.unshift({id:Date.now(),date:new Date().toLocaleString('ja-JP'),items:requests[ri].items||[],total,method:'QR決済（QR専用残高）',given:0,change:0,cardName:cards[ci].name,cardPaid:total,cashPaid:0});requests[ri]={...requests[ri],status:'paid',paidAt:new Date().toISOString(),cardName:cards[ci].name};tx.set(storeRef,{...data,cards,products,sales,paymentRequests:requests,updatedAt:serverTimestamp()});});
+        state.textContent='支払い完了！レジに自動反映されました。';state.style.background='#e2f6e8';info.textContent='QR専用残高から支払い済みです。';
+      }catch(e){state.textContent=e.message||'支払いに失敗しました。';info.classList.remove('hidden');payButton.disabled=false;}};
+    await refreshRequest();onSnapshot(storeRef,snap=>{if(snap.exists()){refreshRequest()}},err=>{state.textContent='同期エラー：レジ担当者に確認してください。'});
   } else {
-    applyingRemote = true;
-    window.applyShinposRemoteData(first.data());
-    applyingRemote = false;
+    onSnapshot(storeRef,snap=>{if(!snap.exists())return;const data=snap.data();applyingRemote=true;window.applyShinposRemoteData(data);applyingRemote=false;ready=true;setStatus('☁ 同期中');
+      if(currentQrRequestId){const req=(data.paymentRequests||[]).find(r=>r.id===currentQrRequestId);if(req?.status==='paid'){$('qrPayStatus').textContent='支払い完了！カード残高・在庫・売上を更新しました。';$('qrPayStatus').style.background='#e2f6e8';}}
+    },err=>{console.error(err);setStatus('同期エラー',true)});
+    window.syncShinposData=data=>{if(!ready||applyingRemote)return;writeQueue=writeQueue.then(async()=>{const snap=await getDoc(storeRef),existing=snap.exists()?snap.data():{};await setDoc(storeRef,{...existing,...data,updatedAt:serverTimestamp()})}).then(()=>setStatus('☁ 同期済み')).catch(err=>{console.error(err);setStatus('保存失敗',true)});};
+    setStatus('☁ 接続完了');
   }
-  onSnapshot(storeRef, snap => {
-    if (!snap.exists()) return;
-    applyingRemote = true;
-    window.applyShinposRemoteData(snap.data());
-    applyingRemote = false;
-    ready = true;
-    setStatus('☁ 同期中');
-  }, err => { console.error(err); setStatus('同期エラー', true); });
-  window.syncShinposData = data => {
-    if (!ready || applyingRemote) return;
-    writeQueue = writeQueue.then(() => setDoc(storeRef, {...data, updatedAt: serverTimestamp()}))
-      .then(() => setStatus('☁ 同期済み'))
-      .catch(err => { console.error(err); setStatus('保存失敗', true); });
-  };
-  setStatus('☁ 接続完了');
 } catch (err) {
   console.error(err);
   const code = err?.code || '';
